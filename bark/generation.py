@@ -139,16 +139,20 @@ def _grab_best_device(use_gpu=True):
     return device
 
 
-def _get_ckpt_path(model_type, use_small=False):
+def _get_ckpt_path(model_type, use_small=False, cache_path=None):
     key = model_type
     if use_small or USE_SMALL_MODELS:
         key += "_small"
-    return os.path.join(CACHE_DIR, REMOTE_MODEL_PATHS[key]["file_name"])
+    if cache_path is not None:
+        return os.path.join(CACHE_DIR, REMOTE_MODEL_PATHS[key]["file_name"])
+    else:
+        return os.path.join(cache_path, REMOTE_MODEL_PATHS[key]["file_name"])
 
-
-def _download(from_hf_path, file_name):
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    hf_hub_download(repo_id=from_hf_path, filename=file_name, local_dir=CACHE_DIR)
+def _download(from_hf_path, file_name, cache_path=None):
+    if cache_path is None:
+        cache_path = CACHE_DIR
+    os.makedirs(cache_path, exist_ok=True)
+    hf_hub_download(repo_id=from_hf_path, filename=file_name, local_dir=cache_path)
 
 
 class InferenceContext:
@@ -192,7 +196,9 @@ def clean_models(model_key=None):
     gc.collect()
 
 
-def _load_model(ckpt_path, device, use_small=False, model_type="text"):
+def _load_model(ckpt_path, device, use_small=False, model_type="text", cache_path=None):
+    if cache_path is None:
+        cache_path = CACHE_DIR
     if model_type == "text":
         ConfigClass = GPTConfig
         ModelClass = GPT
@@ -207,8 +213,8 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     model_key = f"{model_type}_small" if use_small or USE_SMALL_MODELS else model_type
     model_info = REMOTE_MODEL_PATHS[model_key]
     if not os.path.exists(ckpt_path):
-        logger.info(f"{model_type} model not found, downloading into `{CACHE_DIR}`.")
-        _download(model_info["repo_id"], model_info["file_name"])
+        logger.info(f"{model_type} model not found, downloading into `{cache_path}`.")
+        _download(model_info["repo_id"], model_info["file_name"], cache_path=cache_path)
     checkpoint = torch.load(ckpt_path, map_location=device)
     # this is a hack
     model_args = checkpoint["model_args"]
@@ -258,8 +264,8 @@ def _load_codec_model(device):
     return model
 
 
-def load_model(use_gpu=True, use_small=False, force_reload=False, model_type="text"):
-    _load_model_f = funcy.partial(_load_model, model_type=model_type, use_small=use_small)
+def load_model(use_gpu=True, use_small=False, force_reload=False, model_type="text", cache_path=None):
+    _load_model_f = funcy.partial(_load_model, model_type=model_type, use_small=use_small, cache_path=cache_path)
     if model_type not in ("text", "coarse", "fine"):
         raise NotImplementedError()
     global models
@@ -270,7 +276,7 @@ def load_model(use_gpu=True, use_small=False, force_reload=False, model_type="te
         models_devices[model_key] = device
         device = "cpu"
     if model_key not in models or force_reload:
-        ckpt_path = _get_ckpt_path(model_type, use_small=use_small)
+        ckpt_path = _get_ckpt_path(model_type, use_small=use_small, cache_path=cache_path)
         clean_models(model_key=model_key)
         model = _load_model_f(ckpt_path, device)
         models[model_key] = model
@@ -309,6 +315,7 @@ def preload_models(
     fine_use_small=False,
     codec_use_gpu=True,
     force_reload=False,
+    cache_path=None
 ):
     """Load all the necessary models for the pipeline."""
     if _grab_best_device() == "cpu" and (
@@ -316,16 +323,17 @@ def preload_models(
     ):
         logger.warning("No GPU being used. Careful, inference might be very slow!")
     _ = load_model(
-        model_type="text", use_gpu=text_use_gpu, use_small=text_use_small, force_reload=force_reload
+        model_type="text", use_gpu=text_use_gpu, use_small=text_use_small, force_reload=force_reload, cache_path=cache_path
     )
     _ = load_model(
         model_type="coarse",
         use_gpu=coarse_use_gpu,
         use_small=coarse_use_small,
         force_reload=force_reload,
+        cache_path=cache_path
     )
     _ = load_model(
-        model_type="fine", use_gpu=fine_use_gpu, use_small=fine_use_small, force_reload=force_reload
+        model_type="fine", use_gpu=fine_use_gpu, use_small=fine_use_small, force_reload=force_reload, cache_path=cache_path
     )
     _ = load_codec_model(use_gpu=codec_use_gpu, force_reload=force_reload)
 
