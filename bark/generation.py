@@ -151,8 +151,7 @@ def _download(from_hf_path, file_name, cache_path=None):
     if cache_path is None:
         cache_path = CACHE_DIR
     os.makedirs(cache_path, exist_ok=True)
-    hf_hub_download(repo_id=from_hf_path, filename=file_name, local_dir=cache_path)
-
+    hf_hub_download(repo_id=from_hf_path, filename=file_name, local_dir=cache_path, cache_dir=cache_path)
 
 class InferenceContext:
     def __init__(self, benchmark=False):
