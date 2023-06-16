@@ -140,13 +140,12 @@ def _grab_best_device(use_gpu=True):
 
 
 def _get_ckpt_path(model_type, use_small=False, cache_path=None):
+    if cache_path is None:
+        cache_path = CACHE_DIR
     key = model_type
     if use_small or USE_SMALL_MODELS:
         key += "_small"
-    if cache_path is not None:
-        return os.path.join(CACHE_DIR, REMOTE_MODEL_PATHS[key]["file_name"])
-    else:
-        return os.path.join(cache_path, REMOTE_MODEL_PATHS[key]["file_name"])
+    return os.path.join(cache_path, REMOTE_MODEL_PATHS[key]["file_name"])
 
 def _download(from_hf_path, file_name, cache_path=None):
     if cache_path is None:
